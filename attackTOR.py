@@ -35,35 +35,35 @@ class Cli(cli.Application):
 	def threads(self, threads):
 		self.threads = threads
 
-	@cli.switch(["-m", "--mode"],cli.Set("windows", "linux", case_sensitive = False), mandatory=True, help="Filter the platform of exit-nodes to attack.") 
+	@cli.switch(["-m", "--mode"],cli.Set("windows", "linux", case_sensitive = False), mandatory=True, help="Filter the platform of exit-nodes to attack.")
 	def server_mode(self, mode):
 		self.mode = mode
 
-	@cli.switch(["-u", "--users-file"], help="Users File in the Bruteforce mode.", requires = ["--brute"]) 
+	@cli.switch(["-u", "--users-file"], help="Users File in the Bruteforce mode.", requires = ["--brute"])
 	def users_file(self, usersFile):
 		self.usersFile = usersFile
 
-	@cli.switch(["-f", "--passwords-file"], help="Passwords File in the Bruteforce mode.", requires = ["--brute"]) 
+	@cli.switch(["-f", "--passwords-file"], help="Passwords File in the Bruteforce mode.", requires = ["--brute"])
 	def users_file(self, usersFile):
 		self.usersFile = usersFile
 
-	@cli.switch(["-k", "--shodan-key"], help="Development Key to use Shodan API.", requires = ["--use-shodan"]) 
+	@cli.switch(["-k", "--shodan-key"], help="Development Key to use Shodan API.", requires = ["--use-shodan"])
 	def shodan_key(self, shodanKey):
 		self.shodanKey = shodanKey
 
-	@cli.switch(["-l", "--list-ports"], str, help="Comma-separated List of ports to scan with Nmap.") 
+	@cli.switch(["-l", "--list-ports"], str, help="Comma-separated List of ports to scan with Nmap.")
 	def list_ports(self, scanPorts):
 		self.scanPorts = scanPorts
 
-	@cli.switch(["-p", "--scan-protocol"], cli.Set("tcp", "udp", case_sensitive = True), help="Protocol used to scan the target.") 
+	@cli.switch(["-p", "--scan-protocol"], cli.Set("tcp", "udp", case_sensitive = True), help="Protocol used to scan the target.")
 	def scan_protocol(self, scanProtocol):
 		self.scanProtocol = scanProtocol
 
-	@cli.switch(["-a", "--scan-arguments"], help="Arguments to Nmap.") 
+	@cli.switch(["-a", "--scan-arguments"], help="Arguments to Nmap.")
 	def scan_arguments(self, scanArguments):
 		self.scanArguments = scanArguments
 
-	@cli.switch(["-e", "--exit-node-fingerprint"], help="ExitNode's Fingerprint to attack.") 
+	@cli.switch(["-e", "--exit-node-fingerprint"], help="ExitNode's Fingerprint to attack.")
 	def exitNodeFingerprint(self, exitNodeFingerprint):
 		self.exitNodeFingerprint = exitNodeFingerprint
 
@@ -92,19 +92,28 @@ class MainAttack:
 			log.info("[+] Using the fingerprint: %s " %(cli.exitNodeFingerprint))
 		log.info("[+] Filter by platform: %s." %(self.cli.mode))
 		downloader = DescriptorDownloader()
+		nm = nmap.PortScanner()
 		for descriptor in downloader.get_server_descriptors().run():
-            if descriptor.exit_policy.is_exiting_allowed() and lowercase(self.cli.mode) in lowercase(descriptor.operating_system):
-                log.info("[+] %s System found... Nickname: %s - OS Version: %s" %(self.cli.mode, descriptor.nickname, descriptor.operating_system))
-                log.info("[+] Starting the NMap Scan with the following options: ")
-                log.info("[+][+] Scan Address: %s " %(descriptor.address))
-                log.info("[+][+] Scan Arguments: %s " %(self.cli.scanArguments))
-                log.info("[+][+] Scan Ports: %s " %(self.cli.scanPorts))
-                nm = nmap.PortScanner()
-                scan = nm.scan(descriptor.address, self.cli.scanPorts, arguments=self.cli.scanArguments)
-                self.recordNmapScan(scan)
-                log.info('[+] Scan Ended for %s .' %(descriptor.nickname))
+			if cli.exitNodeFingerprint != None and descriptor.exit_policy.is_exiting_allowed() and cli.exitNodeFingerprint == descriptor.fingerprint:
+				log.info("[+] %s The Fingerprint %s has been found... Nickname: %s - OS Version: %s" %(cli.exitNodeFingerprint, self.cli.mode, descriptor.nickname, descriptor.operating_system))
+				log.info("[+] Starting the NMap Scan with the following options: ")
+				log.info("[+][+] Scan Address: %s " %(descriptor.address))
+				log.info("[+][+] Scan Arguments: %s " %(self.cli.scanArguments))
+				log.info("[+][+] Scan Ports: %s " %(self.cli.scanPorts))
+				scan = nm.scan(descriptor.address, self.cli.scanPorts, arguments=self.cli.scanArguments)
+				self.recordNmapScan(scan)
+				log.info('[+] Scan Ended for %s .' %(descriptor.nickname))
+			elif descriptor.exit_policy.is_exiting_allowed() and lowercase(self.cli.mode) in lowercase(descriptor.operating_system):
+				log.info("[+] %s System found... Nickname: %s - OS Version: %s" %(self.cli.mode, descriptor.nickname, descriptor.operating_system))
+				log.info("[+] Starting the NMap Scan with the following options: ")
+				log.info("[+][+] Scan Address: %s " %(descriptor.address))
+				log.info("[+][+] Scan Arguments: %s " %(self.cli.scanArguments))
+				log.info("[+][+] Scan Ports: %s " %(self.cli.scanPorts))
+				scan = nm.scan(descriptor.address, self.cli.scanPorts, arguments=self.cli.scanArguments)
+				self.recordNmapScan(scan)
+				log.info('[+] Scan Ended for %s .' %(descriptor.nickname))
 
-    def recordNmapScan(self, scan):
+	def recordNmapScan(self, scan):
 		entryFile = 'nmapScan.txt'
 		nmapFileResults = open(entryFile, 'w')
 		entry = '------- NMAP SCAN REPORT -------'
@@ -120,6 +129,7 @@ class MainAttack:
 
 		nmapFileResults.write(entry)
 		nmapFileResults.close()
+
 
 if __name__ == "__main__":
 	Cli.run()
