@@ -20,6 +20,7 @@ class Cli(cli.Application):
 	'''
 	verbose = cli.Flag(["-v", '--verbose'], help="Verbose Mode.")
 	brute = cli.Flag(["-b", '--brute'], help="Brute Force Mode. (Specify -u/--users-file and -f/--passwords-file options to select the users and passwords files.)")
+	useMirror = cli.Flag(["-d", '--use-mirrors'], help="Use the mirror directories of TOR. This will help to not overwhelm the official directories")
 	useShodan = cli.Flag(["-s", '--use-shodan'], help="Use ShodanHQ Service. (Specify -k/--shodan-key to set up the file where's stored your shodan key.)")
 	threads = 1
 	mode = None
@@ -33,7 +34,7 @@ class Cli(cli.Application):
 	exitNodeFingerprint = None #Fingerprint of the exit-node to attack.
 	queue = Queue.Queue() #Queue with the host/open-port found in the scanning. 
 
-	@cli.switch(["-n", "--servers-to-attack"], help="Number of TOR exit-nodes to attack. Default = 10")
+	@cli.switch(["-n", "--servers-to-attack"], int, help="Number of TOR exit-nodes to attack. Default = 10")
 	def servers_to_attack(self, exitNodesToAttack):
 		'''	
 			Number of "exit-nodes" to attack received from command-line
@@ -68,7 +69,7 @@ class Cli(cli.Application):
 		'''
 		self.usersFile = usersFile
 
-	@cli.switch(["-k", "--shodan-key"], help="Development Key to use Shodan API.", requires=["--use-shodan"])
+	@cli.switch(["-k", "--shodan-key"], str, help="Development Key to use Shodan API.", requires=["--use-shodan"])
 	def shodan_key(self, shodanKey):
 		'''
 			This option is used to specify the file where the shodan development key is stored
@@ -103,7 +104,6 @@ class Cli(cli.Application):
 		'''
 		self.exitNodeFingerprint = exitNodeFingerprint
 
-
 	def main(self):
 		'''
 			List and Scan the exit nodes. The function will return an dictionary with the exitnodes found and the open ports.
@@ -111,16 +111,16 @@ class Cli(cli.Application):
 		'''
 		discovery = Discovery(self)
 		exitNodes = discovery.listExitNodes() #Returns a tuple with IP Addresses and open-ports.
+		if len(exitNodes) > 0:
+			for thread in range(self.threads): #Creating the number of threads specified by command-line.
+				worker = WorkerThread(self.queue, thread, self)
+				worker.setDaemon(True)
+				worker.start()
 
-		for thread in range(self.threads): #Creating the number of threads specified by command-line.
-			worker = WorkerThread(self.queue, thread, self)
-			worker.setDaemon(True)
-			worker.start()
+			for exitNode in exitNodes.items():
+				self.queue.put(exitNode)
+			self.queue.join() #Blocks the main process until the queue is empty.
 
-		for exitNode in exitNodes.items():
-			self.queue.put(exitNode)
-		self.queue.join() #Blocks the main process until the queue is empty.
-		
 		log.info("[+] Process finished at "+ strftime("%Y-%m-%d %H:%M:%S", gmtime()))
 
 class Discovery:
@@ -144,17 +144,21 @@ class Discovery:
 		'''
 			List the Exit Nodes using the filters specified by command-line.
 		'''
+		nodesAlreadyScanned = []
 		log.info("[+] Try to listing the current Exit-Nodes of TOR.")
 		if self.cli.exitNodeFingerprint != None:
 			log.info("[+] Using the fingerprint: %s " % (self.cli.exitNodeFingerprint))
 		log.info("[+] Filter by platform: %s." % (self.cli.mode))
-		downloader = DescriptorDownloader(use_mirrors=True)
+		log.info("[+] Retrieving the first %d records in the Descriptors." %(self.cli.exitNodesToAttack))
+		downloader = DescriptorDownloader(use_mirrors=self.cli.useMirror)
 		nm = nmap.PortScanner()
 		if self.cli.exitNodeFingerprint != None:
 			descriptors = downloader.get_server_descriptors(fingerprints=self.cli.exitNodeFingerprint)
 		else:
 			descriptors = downloader.get_server_descriptors()
-		for descriptor in descriptors.run()[1:self.cli.exitNodesToAttack]:
+		listDescriptors = descriptors.run()
+		log.info("[+] Number of Records found: %d " %(len(listDescriptors)))		
+		for descriptor in listDescriptors[1:self.cli.exitNodesToAttack]:
 		#for descriptor in parse_file(open("/home/adastra/Escritorio/tor-browser_en-US-Firefox/Data/Tor/cached-consensus")):
 			if self.cli.mode.lower() in descriptor.operating_system.lower() and descriptor.exit_policy.is_exiting_allowed():
 				#SEARCH FILTERING BY FINGERPRINT
@@ -162,18 +166,23 @@ class Discovery:
 				#	 Relay Fingerprint equals to the Fingerprint specified in command-line. AND 
 				#	 Relay's Operative System equals to the Operative System (option mode) specified in command-line AND
 				#	 The Relay is a Exit Node. 	
-				log.info("[+] %s System has been found... Nickname: %s - OS Version: %s" % (descriptor.operating_system, descriptor.nickname, descriptor.operating_system))
-				log.info("[+] Starting the NMap Scan with the following options: ")
-				log.info("[+][+] Scan Address: %s " % (descriptor.address))
-				log.info("[+][+] Scan Arguments: %s " % (self.cli.scanArguments))
-				log.info("[+][+] Scan Ports: %s " % (self.cli.scanPorts))
-				if self.cli.scanArguments != None:
-					nm.scan(descriptor.address, self.cli.scanPorts, arguments=self.cli.scanArguments)
-				else:
-					nm.scan(descriptor.address, self.cli.scanPorts)	
-				self.recordNmapScan(nm)
-				log.info('[+] Scan Ended for %s .' % (descriptor.nickname))
+				if descriptor.address not in nodesAlreadyScanned:
+					log.info("[+] %s System has been found... Nickname: %s - OS Version: %s" % (descriptor.operating_system, descriptor.nickname, descriptor.operating_system))
+					log.info("[+] Starting the NMap Scan with the following options: ")
+					log.info("[+][+] Scan Address: %s " % (descriptor.address))
+					log.info("[+][+] Scan Arguments: %s " % (self.cli.scanArguments))
+					log.info("[+][+] Scan Ports: %s " % (self.cli.scanPorts))
+					if self.cli.scanArguments != None:
+						nm.scan(descriptor.address, self.cli.scanPorts, arguments=self.cli.scanArguments)
+					else:
+						nm.scan(descriptor.address, self.cli.scanPorts)	
+					self.recordNmapScan(nm)
+					log.info('[+] Scan Ended for %s .' % (descriptor.nickname))
+					nodesAlreadyScanned.append(descriptor.address)
+
 				#Single target specified with "-e" option. There's no need to continue in this loop. Break it.
+		if len(self.exitNodes) == 0:
+			log.info("[+] In the first %d records searching for the %s Operating System, there's no results (machines with detected open ports)" %(self.cli.exitNodesToAttack, self.cli.mode.lower()))	
 		return self.exitNodes
 
 	def recordNmapScan(self, scan):
@@ -183,8 +192,9 @@ class Discovery:
 		'''
 		entryFile = 'nmapScan.txt'
 		nmapFileResults = open(entryFile, 'a')
-		entry = '------- NMAP SCAN REPORT ------- \n'
+
 		for host in scan.all_hosts():
+			entry = '------- NMAP SCAN REPORT START FOR %s------- \n' %(host)
 			entry += '[+] Host: %s \n' % (host)
 			if scan[host].has_key('status'):
 				entry += '[+][+]State: %s \n' % (scan[host]['status']['state'])
@@ -202,8 +212,9 @@ class Discovery:
 						entry += 'Name: %s \n ' % (scan[host][self.cli.scanProtocol][port]['name'])
 			else:
 				log.info("[-] There's no match in the Nmap scan with the specified protocol %s" %(self.cli.scanProtocol))
-		entry += '\n\n'
-		nmapFileResults.write(entry)
+			entry += '------- NMAP SCAN REPORT END ------- \n'
+			entry += '\n\n'
+			nmapFileResults.write(entry)
 		nmapFileResults.close()
 
 class WorkerThread(threading.Thread):
@@ -216,8 +227,10 @@ class WorkerThread(threading.Thread):
 		self.queue = queue
 		self.tid = tid
         	self.cli = cli
-		if self.cli.useShodan:
+		self.bruteForcePorts ={'ftpBrute':21, 'sshBrute':22}
+		if self.cli.useShodan == True:
 			#Using Shodan to search information about this machine in shodan database.
+			log.info("[+] Shodan Activated. About to read the Development Key. ")
 			if self.cli.shodanKey == None:
 				#If the key is None, we can't use shodan.
 				log.warn("[-] Shodan Key's File has not been specified. We can't use shodan without a valid key")
@@ -225,6 +238,7 @@ class WorkerThread(threading.Thread):
 				#Read the shodan key and create the WebAPI object.
 				shodanKey = open(self.cli.shodanKey).readline().rstrip('\n')
 				self.shodanApi = WebAPI(shodanKey)
+				log.info("[+] Connected to Shodan. ")
 	def run(self) :
 		lock = threading.Lock()
 		while True :
@@ -232,19 +246,56 @@ class WorkerThread(threading.Thread):
 			host = None
 			try:
 				ip, port = self.queue.get(timeout=1)
-				if self.shodanApi != None:
+				if hasattr(self, 'shodanApi'):
+					log.info("[+] Using Shodan against %s " %(ip))
 					shodanResults = self.shodanApi.host(ip)
-						
+					recordShodanResults(self, ip, shodanResults)
+				
+				if self.cli.brute == True:
+					if self.cli.usersFile != None and self.cli.passFile != None:
+						for method in self.bruteForcePorts.keys():
+							if self.bruteForcePorts[method] == port:
+								#Open port detected for a service supported in the "Brute-Forcer"
+								#Calling the method using reflection.
+								attr(service)
+								
+					else:
+						log.warn("[-] BruteForce mode specified but there's no files for users and passwords. Use -u and -f options")
 			except Queue.Empty :
 				log.info("Worker %d exiting... "%self.tid)
-
-			try :
-				print exitNode
 			finally:
+				log.info("Releasing the Lock in the Thread %d "%self.tid)
 				lock.release()
 				self.queue.task_done()
+	
+	def ftpBrute(self):
+		pass
+	def sshBrute(self):
+		pass
+	
+	def recordShodanResults(self, host, results):
+		entryFile = 'shodanScan-%s.txt' %(host)
+		shodanFileResults = open(entryFile, 'w')
+		entry = '------- SHODAN REPORT START FOR %s ------- \n' %(host)
+		recursiveInfo(entry, results)		
+		entry = '------- SHODAN REPORT END FOR %s ------- \n' %(host)
+		shodanFileResults.write(entry)
+		shodanFileResults.close()			
 
-
+	def recursiveInfo(self, entry, data):
+		if type(data) == dict:
+			for key in results.keys():
+				if type(key) == dict:
+					entry += recursiveInfo(entry, key)
+				elif type(key) == list:
+					for element in key:
+						if type(key) == dict:
+							entry += recursiveInfo(entry, key)
+											
+				else:
+					entry += '[+]%s : %s \n' %(key, results[key])
+					print entry
+	
 if __name__ == "__main__":
 	'''
 		Start the main program.
