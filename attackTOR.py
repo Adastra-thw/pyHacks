@@ -1,3 +1,5 @@
+from shodan.api import WebAPIError
+import zlib
 from shodan import WebAPI
 from stem.descriptor import parse_file
 from plumbum import cli, local
@@ -28,7 +30,7 @@ class Cli(cli.Application):
 	passFile = None
 	exitNodesToAttack = 10 #Number of default exit-nodes to filter from the Server Descriptor file.
 	shodanKey = None
-	scanPorts = "21,22,23,53,69,80,88,110,139,143,161,389,443,445,1080,1433,3306,5432,8080,9050,9051,5800" #Default ports used to scan with nmap.
+	scanPorts = "21,22,23,53,69,80,88,110,139,143,161,389,443,445,1079,1080,1433,3306,5432,8080,9050,9051,5800" #Default ports used to scan with nmap.
 	scanProtocol = 'tcp' #Using TCP protocol to perform the nmap scan.
 	scanArguments = None #Scan Arguments passed to nmap.
 	exitNodeFingerprint = None #Fingerprint of the exit-node to attack.
@@ -111,7 +113,7 @@ class Cli(cli.Application):
 		'''
 		discovery = Discovery(self)
 		exitNodes = discovery.listExitNodes() #Returns a tuple with IP Addresses and open-ports.
-		if len(exitNodes) > 0:
+		if exitNodes != None and len(exitNodes) > 0:
 			for thread in range(self.threads): #Creating the number of threads specified by command-line.
 				worker = WorkerThread(self.queue, thread, self)
 				worker.setDaemon(True)
@@ -150,13 +152,20 @@ class Discovery:
 			log.info("[+] Using the fingerprint: %s " % (self.cli.exitNodeFingerprint))
 		log.info("[+] Filter by platform: %s." % (self.cli.mode))
 		log.info("[+] Retrieving the first %d records in the Descriptors." %(self.cli.exitNodesToAttack))
+		
+		if self.cli.useMirror == True:
+			log.info("[+] Using the Directory Mirrors to get the descriptors")
 		downloader = DescriptorDownloader(use_mirrors=self.cli.useMirror)
 		nm = nmap.PortScanner()
 		if self.cli.exitNodeFingerprint != None:
 			descriptors = downloader.get_server_descriptors(fingerprints=self.cli.exitNodeFingerprint)
 		else:
 			descriptors = downloader.get_server_descriptors()
-		listDescriptors = descriptors.run()
+		try:
+			listDescriptors = descriptors.run()
+		except zlib.error:
+			log.error("[-] Error fetching the TOR descriptors. This is something quite common... Try again in a few seconds.")
+			return				
 		log.info("[+] Number of Records found: %d " %(len(listDescriptors)))		
 		for descriptor in listDescriptors[1:self.cli.exitNodesToAttack]:
 		#for descriptor in parse_file(open("/home/adastra/Escritorio/tor-browser_en-US-Firefox/Data/Tor/cached-consensus")):
@@ -248,8 +257,12 @@ class WorkerThread(threading.Thread):
 				ip, port = self.queue.get(timeout=1)
 				if hasattr(self, 'shodanApi'):
 					log.info("[+] Using Shodan against %s " %(ip))
-					shodanResults = self.shodanApi.host(ip)
-					recordShodanResults(self, ip, shodanResults)
+					try:
+						shodanResults = self.shodanApi.host(ip)
+						recordShodanResults(self, ip, shodanResults)
+					except WebAPIError:
+						log.error("[-] There's no information about %s in the Shodan Database." %(ip))
+						pass
 				
 				if self.cli.brute == True:
 					if self.cli.usersFile != None and self.cli.passFile != None:
@@ -275,7 +288,7 @@ class WorkerThread(threading.Thread):
 	
 	def recordShodanResults(self, host, results):
 		entryFile = 'shodanScan-%s.txt' %(host)
-		shodanFileResults = open(entryFile, 'w')
+		shodanFileResults = open(entryFile, 'a')
 		entry = '------- SHODAN REPORT START FOR %s ------- \n' %(host)
 		recursiveInfo(entry, results)		
 		entry = '------- SHODAN REPORT END FOR %s ------- \n' %(host)
