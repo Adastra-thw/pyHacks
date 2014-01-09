@@ -158,7 +158,7 @@ class Discovery:
 		downloader = DescriptorDownloader(use_mirrors=self.cli.useMirror)
 		nm = nmap.PortScanner()
 		if self.cli.exitNodeFingerprint != None:
-			descriptors = downloader.get_server_descriptors(fingerprints=self.cli.exitNodeFingerprint)
+			descriptors = downloader.get_server_descriptors(fingerprints=[self.cli.exitNodeFingerprint])
 		else:
 			descriptors = downloader.get_server_descriptors()
 		try:
@@ -189,7 +189,6 @@ class Discovery:
 					log.info('[+] Scan Ended for %s .' % (descriptor.nickname))
 					nodesAlreadyScanned.append(descriptor.address)
 
-				#Single target specified with "-e" option. There's no need to continue in this loop. Break it.
 		if len(self.exitNodes) == 0:
 			log.info("[+] In the first %d records searching for the %s Operating System, there's no results (machines with detected open ports)" %(self.cli.exitNodesToAttack, self.cli.mode.lower()))	
 		return self.exitNodes
@@ -282,9 +281,11 @@ class WorkerThread(threading.Thread):
 				self.queue.task_done()
 	
 	def ftpBrute(self):
-		pass
+		log.info("Starting FTP BruteForce mode on Thread: %d "%self.tid)
+		#log.info("Reading the Users File: %s "%self.cli.)
+		
 	def sshBrute(self):
-		pass
+		log.info("Starting SSH BruteForce mode on Thread: %d "%self.tid)
 	
 	def recordShodanResults(self, host, results):
 		entryFile = 'shodanScan-%s.txt' %(host)
