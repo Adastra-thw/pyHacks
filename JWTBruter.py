@@ -1,6 +1,6 @@
 import jwt;
 
-print("Script to brute-force JWT secret token",'white')
+print("Script para ejecutar fuerza bruta sobre un token JWT")
 encoded = input("JWT TOKEN: ")
 passwords = input("Diccionario: ")
 
