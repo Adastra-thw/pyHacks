@@ -11,7 +11,8 @@ with open(passwords) as secrets:
             payload = jwt.decode(encoded, secret.rstrip(), algorithms=['HS256'])
             print('Token decodificado con la siguiente password ....[' + secret.rstrip() + ']')
             break
-        except jwt.InvalidTokenError:
+        except jwt.InvalidTokenError as e:
+            print(e)
             print('Token Invalido .... [' + secret.rstrip() + ']')
         except jwt.ExpiredSignatureError:
             print('Token Expirado ....[' + secret.rstrip() + ']')

