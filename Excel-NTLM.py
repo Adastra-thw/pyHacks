@@ -4,7 +4,7 @@ import time
 import xlsxwriter
 
 
-def createXLSX(filename, server, port):
+def createXLSX(filename, server):
 	workbook = xlsxwriter.Workbook(filename)
 	worksheet = workbook.add_worksheet()
 	#worksheet.write_url('AZ99', "external://"+server+":"+port+"\\share\\[AccountingBook.xlsx]SheetName'!$C$3:$H$6,2,FALSE)")
