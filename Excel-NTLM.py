@@ -31,8 +31,8 @@ def main():
 		print('Example : Excel-NTLM.py 10.10.1.110 445 ')
 
 	else:
-		host = sys.argv[1]
-		port = sys.argv[2]
+		host = str(sys.argv[1])
+		port = str(sys.argv[2])
 		createXLSX("Accounting.xlsx", host, port)
 		msfListener(host, port)
 
