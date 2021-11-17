@@ -8,7 +8,7 @@ def createXLSX(filename, server, port):
 	workbook = xlsxwriter.Workbook(filename)
 	worksheet = workbook.add_worksheet()
 	#worksheet.write_url('AZ99', "external://"+server+":"+port+"\\share\\[AccountingBook.xlsx]SheetName'!$C$3:$H$6,2,FALSE)")
-	worksheet.write_url('AZ1', "external://"+server+"\\share\\[Workbookname.xlsx]SheetName'!$B$2:$C$62,2,FALSE)")
+	worksheet.write_url('AZ1', "external://"+server+":"+port+"\\share\\[Workbookname.xlsx]SheetName'!$B$2:$C$62,2,FALSE)")
 	workbook.close()
 	print("Fichero creado")
 
